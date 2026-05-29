@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>عداد الرحلات</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--card:#1c2330;--card2:#21293a;
+  --border:#2d3748;--border2:#3d4f6b;
+  --text:#e6edf3;--text2:#adbac7;--muted:#636e7b;
+  --green:#3fb950;--green-bg:rgba(63,185,80,.12);--green-bd:rgba(63,185,80,.3);
+  --red:#f85149;--red-bg:rgba(248,81,73,.12);--red-bd:rgba(248,81,73,.3);
+  --blue:#58a6ff;--blue-bg:rgba(88,166,255,.12);--blue-bd:rgba(88,166,255,.3);
+  --yellow:#d29922;--yellow-bg:rgba(210,153,34,.12);
+  --sh:0 4px 24px rgba(0,0,0,.4);
+}
+body{background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;min-height:100vh;overflow-x:hidden}
+#app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+
+/* HEADER */
+#hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;position:sticky;top:0;z-index:100}
+.hdr-row{display:flex;align-items:center;justify-content:space-between}
+.hdr-title{font-size:18px;font-weight:900;display:flex;align-items:center;gap:10px}
+.hdr-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--green),#2ea043);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 12px rgba(63,185,80,.4)}
+.hdr-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.total-pill{background:var(--blue-bg);border:1px solid var(--blue-bd);color:var(--blue);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-top:12px}
+.tab{flex:1;padding:8px;background:transparent;color:var(--muted);font-size:12px;font-family:'Cairo',sans-serif;font-weight:700;border-radius:8px;border:none;cursor:pointer;transition:.15s}
+.tab.active{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+
+/* CONTENT */
+#content{flex:1;padding:16px;padding-bottom:30px}
+.page{display:none}.page.active{display:block}
+
+/* MAIN TRACKER */
+.status-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px 20px;margin-bottom:16px;text-align:center;box-shadow:var(--sh);position:relative;overflow:hidden}
+.status-card::before{content:'';position:absolute;inset:0;opacity:.03;background:repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%);background-size:20px 20px}
+.status-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+.status-km{font-size:64px;font-weight:900;font-family:'JetBrains Mono',monospace;line-height:1;letter-spacing:-2px}
+.status-km span{font-size:22px;font-weight:600;color:var(--muted);margin-right:4px}
+.status-idle{color:var(--muted)}
+.status-active{color:var(--green);text-shadow:0 0 30px rgba(63,185,80,.4)}
+.pulse{display:inline-block;width:10px;height:10px;background:var(--green);border-radius:50%;margin-left:8px;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,.6)}50%{box-shadow:0 0 0 8px rgba(63,185,80,0)}}
+
+.info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.info-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.info-box .il{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:4px}
+.info-box .iv{font-size:14px;font-weight:800;font-family:'JetBrains Mono',monospace}
+
+/* BUTTONS */
+.btn-start{width:100%;padding:18px;background:linear-gradient(135deg,var(--green),#2ea043);border:none;border-radius:16px;color:#fff;font-size:18px;font-weight:900;font-family:'Cairo',sans-serif;cursor:pointer;box-shadow:0 4px 20px rgba(63,185,80,.4);transition:.2s;letter-spacing:.03em}
+.btn-start:active{transform:scale(.97)}
+.btn-end{width:100%;padding:18px;background:linear-gradient(135deg,var(--red),#b91c1c);border:none;border-radius:16px;color:#fff;font-size:18px;font-weight:900;font-family:'Cairo',sans-serif;cursor:pointer;box-shadow:0 4px 20px rgba(248,81,73,.4);transition:.2s;letter-spacing:.03em}
+.btn-end:active{transform:scale(.97)}
+.btn-cancel{width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-size:13px;font-family:'Cairo',sans-serif;font-weight:700;cursor:pointer;margin-top:8px}
+
+/* NOTE INPUT */
+.note-wrap{margin-bottom:12px}
+.note-lbl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.note-inp{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Cairo',sans-serif;font-size:13px;outline:none}
+.note-inp:focus{border-color:var(--blue)}
+
+/* HISTORY */
+.history-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.history-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.clear-btn{font-size:11px;color:var(--red);background:var(--red-bg);border:1px solid var(--red-bd);border-radius:8px;padding:4px 10px;cursor:pointer;font-family:'Cairo',sans-serif;font-weight:700}
+
+.filter-row{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
+.filter-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;font-family:'Cairo',sans-serif;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap;transition:.15s}
+.filter-btn.active{background:var(--blue-bg);border-color:var(--blue-bd);color:var(--blue)}
+
+.trip-item{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--sh)}
+.trip-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.trip-date{font-size:12px;color:var(--muted);font-weight:700}
+.trip-note{font-size:13px;color:var(--text2);margin-top:2px}
+.trip-km{font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--green);line-height:1}
+.trip-km-lbl{font-size:10px;color:var(--muted);font-weight:700;text-align:left}
+.trip-details{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.trip-det{background:var(--card2);border-radius:8px;padding:6px 8px}
+.trip-det .dl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:2px}
+.trip-det .dv{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.trip-del{background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);border-radius:8px;padding:4px 10px;font-size:11px;font-family:'Cairo',sans-serif;font-weight:700;cursor:pointer;margin-top:10px;width:100%}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state .ei{font-size:48px;margin-bottom:16px}
+.empty-state p{font-size:13px;line-height:2}
+
+/* STATS PAGE */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+.stat-card .sl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:6px}
+.stat-card .sv{font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace}
+.stat-card .su{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px}
+
+.day-group{margin-bottom:8px}
+.day-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:8px 4px;display:flex;align-items:center;gap:8px}
+.day-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.day-km{margin-right:auto;font-size:12px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-weight:700}
+
+/* GPS ERROR */
+.gps-error{background:var(--yellow-bg);border:1px solid var(--yellow);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--yellow);margin-bottom:12px;line-height:1.7;display:none}
+
+/* LOCATION ACCURACY */
+.acc-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.acc-good{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
+.acc-ok{background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(210,153,34,.4)}
+.acc-bad{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bd)}
+
+input:focus{outline:none}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* MAP MODAL */
+.map-modal{display:none;position:fixed;inset:0;z-index:999;background:var(--bg);flex-direction:column}
+.map-modal.open{display:flex}
+.map-header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.map-title{font-size:15px;font-weight:900}
+.map-close{background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);border-radius:10px;padding:6px 14px;font-size:13px;font-family:'Cairo',sans-serif;font-weight:700;cursor:pointer}
+#map-container{flex:1;position:relative}
+#leaflet-map{width:100%;height:100%}
+.map-info{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(13,17,23,.9);border:1px solid var(--border);border-radius:14px;padding:10px 16px;display:flex;gap:16px;backdrop-filter:blur(10px)}
+.map-info-item{text-align:center}
+.map-info-item .mil{font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase}
+.map-info-item .miv{font-size:14px;font-weight:900;font-family:'JetBrains Mono',monospace}
+.map-snapping{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(13,17,23,.9);border:1px solid var(--yellow);border-radius:20px;padding:5px 14px;font-size:11px;color:var(--yellow);font-weight:700;display:none}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="hdr">
+  <div class="hdr-row">
+    <div class="hdr-title">
+      <div class="hdr-icon">🚗</div>
+      <div>
+        <div>عداد الرحلات</div>
+        <div class="hdr-sub">GPS • محلي • خاص</div>
+      </div>
+    </div>
+    <div class="total-pill" id="total-pill">0 كم</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="tracker">التتبع</button>
+    <button class="tab" data-tab="history">السجل</button>
+    <button class="tab" data-tab="stats">الإحصاء</button>
+    <button class="tab" data-tab="settings">⚙️</button>
+  </div>
+</div>
+
+<div id="content">
+
+<!-- TRACKER PAGE -->
+<div class="page active" id="page-tracker">
+  <div id="gps-error" class="gps-error"></div>
+
+  <div class="status-card" id="status-card">
+    <div class="status-label" id="status-label">المسافة المقطوعة</div>
+    <div class="status-km status-idle" id="status-km">
+      <span>كم</span>0.00
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted)" id="status-hint">اضغط انطلق لبدء تسجيل رحلة جديدة</div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-box">
+      <div class="il">الوقت</div>
+      <div class="iv" id="inf-time" style="color:var(--blue)">--:--</div>
+    </div>
+    <div class="info-box">
+      <div class="il">السرعة</div>
+      <div class="iv" id="inf-speed" style="color:var(--yellow)">0 <span style="font-size:10px;color:var(--muted)">كم/س</span></div>
+    </div>
+    <div class="info-box">
+      <div class="il">الدقة</div>
+      <div class="iv" id="inf-acc">—</div>
+    </div>
+  </div>
+
+  <div class="note-wrap" id="note-wrap">
+    <div class="note-lbl">ملاحظة (اختياري)</div>
+    <input type="text" class="note-inp" id="trip-note" placeholder="مثال: ذهاب للعمل، سوق، مستشفى...">
+  </div>
+
+  <button class="btn-start" id="main-btn" onclick="toggleTrip()">🟢 &nbsp;انطلق</button>
+  <button class="btn-cancel" id="cancel-btn" style="display:none" onclick="cancelTrip()">✕ إلغاء الرحلة</button>
+</div>
+
+<!-- HISTORY PAGE -->
+<div class="page" id="page-history">
+  <div class="history-header">
+    <div class="history-title">سجل الرحلات</div>
+    <button class="clear-btn" onclick="confirmClear()">🗑️ مسح الكل</button>
+  </div>
+  <div class="filter-row" id="filter-row"></div>
+  <div id="history-list"></div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div class="page" id="page-settings">
+  <div style="margin-bottom:16px">
+    <div class="history-title" style="margin-bottom:14px">⚙️ إعدادات الوقود والتكلفة</div>
+
+    <div class="trip-item" style="margin-bottom:12px">
+      <div class="note-lbl" style="margin-bottom:8px">استهلاك السيارة (ليتر/كم)</div>
+      <input type="number" class="note-inp" id="set-consumption" step="0.001" min="0.01" max="1" placeholder="0.1172">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">مثال: 0.1172 يعني 11.72 ليتر لكل 100 كم</div>
+    </div>
+
+    <div class="trip-item" style="margin-bottom:12px">
+      <div class="note-lbl" style="margin-bottom:8px">سعر ليتر البنزين 95 ($)</div>
+      <input type="number" class="note-inp" id="set-price" step="0.001" min="0.1" max="10" placeholder="1.439">
+    </div>
+
+    <div class="trip-item" style="margin-bottom:16px">
+      <div class="note-lbl" style="margin-bottom:8px">سعر صرف الدولار (ليرة)</div>
+      <input type="number" class="note-inp" id="set-rate" step="1000" min="1000" placeholder="90000">
+    </div>
+
+    <button class="btn-start" onclick="saveSettings()" style="margin-bottom:10px">💾 حفظ الإعدادات</button>
+
+    <div id="settings-saved" style="display:none;text-align:center;color:var(--green);font-size:13px;font-weight:700;padding:8px">✅ تم الحفظ!</div>
+
+    <div class="trip-item" style="margin-top:8px;background:var(--card2)">
+      <div class="note-lbl" style="margin-bottom:8px">الإعدادات الحالية</div>
+      <div id="settings-preview" style="font-size:12px;color:var(--text2);line-height:2"></div>
+    </div>
+  </div>
+</div>
+  <div class="stat-grid" id="stat-grid"></div>
+  <div id="daily-breakdown"></div>
+</div>
+
+</div>
+</div>
+
+<!-- MAP MODAL -->
+<div class="map-modal" id="map-modal">
+  <div class="map-header">
+    <div>
+      <div class="map-title">🗺️ مسار الرحلة</div>
+      <div id="map-subtitle" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+    </div>
+    <button class="map-close" onclick="closeMap()">✕ إغلاق</button>
+  </div>
+  <div id="map-container">
+    <div id="leaflet-map"></div>
+    <div class="map-snapping" id="map-snapping">⏳ جاري تحسين المسار...</div>
+    <div class="map-info" id="map-info">
+      <div class="map-info-item"><div class="mil">المسافة</div><div class="miv" id="map-km" style="color:var(--green)">--</div></div>
+      <div class="map-info-item"><div class="mil">النقاط</div><div class="miv" id="map-pts" style="color:var(--blue)">--</div></div>
+      <div class="map-info-item"><div class="mil">المدة</div><div class="miv" id="map-dur" style="color:var(--yellow)">--</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const SK='trips_v1';
+const SK2='fuel_settings';
+let tracking=false, watchId=null, startPos=null, startTime=null, currentKm=0, timerInterval=null, lastPos=null;
+let posLog=[], lastPosTime=0, fallbackInterval=null, routePoints=[], speedBuffer=[], lastValidPos=null;
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+let leafletMap=null, mapLayer=null;
+
+function openMap(trip){
+  const modal=document.getElementById('map-modal');
+  modal.classList.add('open');
+  const pts=trip.route||[];
+  document.getElementById('map-subtitle').textContent=dateOnly(trip.start)+' — '+timeOnly(trip.start);
+  document.getElementById('map-km').textContent=fKm(trip.km)+' كم';
+  document.getElementById('map-pts').textContent=pts.length+' نقطة';
+  document.getElementById('map-dur').textContent=fTime(trip.duration);
+
+  setTimeout(()=>{
+    if(!leafletMap){
+      leafletMap=L.map('leaflet-map',{zoomControl:true,attributionControl:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(leafletMap);
+    } else {
+      if(mapLayer){leafletMap.removeLayer(mapLayer);mapLayer=null;}
+      leafletMap.eachLayer(l=>{if(l instanceof L.Marker||l instanceof L.Polyline||l instanceof L.CircleMarker)leafletMap.removeLayer(l);});
+    }
+
+    if(pts.length<2){
+      // نقطة واحدة فقط
+      if(pts.length===1){
+        leafletMap.setView(pts[0],16);
+        L.circleMarker(pts[0],{radius:10,color:'#3fb950',fillColor:'#3fb950',fillOpacity:1}).addTo(leafletMap);
+      }
+      return;
+    }
+
+    // رسم المسار الخام أولاً
+    const rawLine=L.polyline(pts,{color:'#58a6ff',weight:4,opacity:0.5,dashArray:'6,4'}).addTo(leafletMap);
+    leafletMap.fitBounds(rawLine.getBounds(),{padding:[30,30]});
+
+    // نقطة البداية والنهاية
+    L.circleMarker(pts[0],{radius:10,color:'#3fb950',fillColor:'#3fb950',fillOpacity:1}).bindPopup('🟢 البداية').addTo(leafletMap);
+    L.circleMarker(pts[pts.length-1],{radius:10,color:'#f85149',fillColor:'#f85149',fillOpacity:1}).bindPopup('🔴 النهاية').addTo(leafletMap);
+
+    // OSRM Road Snapping
+    if(pts.length>=2){
+      const snappingEl=document.getElementById('map-snapping');
+      snappingEl.style.display='block';
+      // نأخذ نقطة كل 5 للتخفيف على الـ API
+      const sampled=pts.filter((_,i)=>i%5===0||i===pts.length-1);
+      const coords=sampled.map(p=>p[1]+','+p[0]).join(';');
+      fetch('https://router.project-osrm.org/match/v1/driving/'+coords+'?overview=full&geometries=geojson&radiuses='+sampled.map(()=>'50').join(';')+'&annotations=false')
+        .then(r=>r.json())
+        .then(data=>{
+          snappingEl.style.display='none';
+          if(data.matchings&&data.matchings[0]){
+            leafletMap.removeLayer(rawLine);
+            const snapped=data.matchings[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+            L.polyline(snapped,{color:'#3fb950',weight:5,opacity:0.9}).addTo(leafletMap);
+
+            // حساب المسافة الحقيقية من OSRM (بالمتر → كيلومتر)
+            const osrmKm=data.matchings.reduce((sum,m)=>sum+(m.distance||0),0)/1000;
+            if(osrmKm>0){
+              document.getElementById('map-km').textContent=fKm(osrmKm)+' كم';
+              document.getElementById('map-km').title='محسوب من OSRM';
+              // تحديث الرحلة المحفوظة بالمسافة الصحيحة
+              const trips=loadTrips();
+              const idx=trips.findIndex(t=>t.id===trip.id);
+              if(idx>=0&&Math.abs(trips[idx].km-osrmKm)>0.05){
+                trips[idx].km=osrmKm;
+                trips[idx].osrmCorrected=true;
+                saveTrips(trips);
+                updateTotalPill();
+                // تحديث الشارة
+                snappingEl.style.display='block';
+                snappingEl.style.borderColor='var(--green)';
+                snappingEl.style.color='var(--green)';
+                snappingEl.textContent='✅ تم تصحيح المسافة: '+fKm(osrmKm)+' كم';
+                setTimeout(()=>{snappingEl.style.display='none';},3000);
+              }
+            }
+          }
+        })
+        .catch(()=>{snappingEl.style.display='none';});
+    }
+  },100);
+}
+
+function closeMap(){
+  document.getElementById('map-modal').classList.remove('open');
+}
+
+// ── Fuel Settings ─────────────────────────────────────────────────────────────
+function loadSettings(){
+  try{return JSON.parse(localStorage.getItem(SK2)||'null');}catch(e){return null;}
+}
+function getSettings(){
+  const s=loadSettings();
+  return {
+    consumption: s&&s.consumption ? s.consumption : 0.1172,
+    price:       s&&s.price       ? s.price       : 1.439,
+    rate:        s&&s.rate        ? s.rate         : 90000
+  };
+}
+function saveSettings(){
+  const c=parseFloat(document.getElementById('set-consumption').value);
+  const p=parseFloat(document.getElementById('set-price').value);
+  const r=parseFloat(document.getElementById('set-rate').value);
+  if(isNaN(c)||isNaN(p)||isNaN(r)||c<=0||p<=0||r<=0){alert('يرجى إدخال أرقام صحيحة');return;}
+  localStorage.setItem(SK2,JSON.stringify({consumption:c,price:p,rate:r}));
+  const el=document.getElementById('settings-saved');
+  el.style.display='block';setTimeout(()=>el.style.display='none',2000);
+  renderSettingsPreview();
+}
+function renderSettingsPreview(){
+  const s=getSettings();
+  const el=document.getElementById('settings-preview');
+  if(!el)return;
+  el.innerHTML=
+    '⛽ الاستهلاك: <b style="color:var(--yellow)">'+s.consumption+' ل/كم</b> ('+((s.consumption*100).toFixed(2))+' ل/100كم)<br>'+
+    '💵 سعر الليتر: <b style="color:var(--green)">$'+s.price+'</b><br>'+
+    '💱 سعر الدولار: <b style="color:var(--blue)">'+s.rate.toLocaleString()+' ل.ل</b>';
+  // fill inputs
+  document.getElementById('set-consumption').value=s.consumption;
+  document.getElementById('set-price').value=s.price;
+  document.getElementById('set-rate').value=s.rate;
+}
+function calcCost(km){
+  const s=getSettings();
+  const liters=km*s.consumption;
+  const usd=liters*s.price;
+  const lbp=usd*s.rate;
+  return {liters,usd,lbp};
+}
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+function loadTrips(){try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch(e){return[];}}
+function saveTrips(a){localStorage.setItem(SK,JSON.stringify(a));}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function fKm(n){return n.toFixed(2);}
+function fTime(ms){
+  const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+  return h>0?h+'س '+(m%60)+'د':(m>0?m+'د '+(s%60)+'ث':s+'ث');
+}
+function fClock(ms){
+  const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function nowStr(){return new Date().toLocaleString('ar-LB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function dateOnly(iso){return new Date(iso).toLocaleDateString('ar-LB',{year:'numeric',month:'long',day:'numeric'});}
+function timeOnly(iso){return new Date(iso).toLocaleTimeString('ar-LB',{hour:'2-digit',minute:'2-digit'});}
+
+// ── GPS Tracking ──────────────────────────────────────────────────────────────
+function toggleTrip(){
+  if(!tracking) startTrip();
+  else endTrip();
+}
+
+function startTrip(){
+  if(!navigator.geolocation){showGpsError('جهازك لا يدعم GPS');return;}
+  document.getElementById('main-btn').textContent='جاري تحديد موقعك...';
+  document.getElementById('main-btn').disabled=true;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    startPos=pos.coords;
+    lastPos=pos.coords;
+    startTime=Date.now();
+    currentKm=0;
+    posLog=[];
+    routePoints=[];
+    lastPosTime=Date.now();
+    lastValidPos=null;
+    speedBuffer=[];
+    tracking=true;
+    document.getElementById('main-btn').disabled=false;
+    document.getElementById('main-btn').className='btn-end';
+    document.getElementById('main-btn').innerHTML='🔴 &nbsp;وصلت';
+    document.getElementById('cancel-btn').style.display='block';
+    document.getElementById('note-wrap').style.opacity='0.5';
+    document.getElementById('trip-note').disabled=true;
+    document.getElementById('status-hint').innerHTML='<span class="pulse"></span> جاري التتبع... <span id="pos-count" style="font-size:10px;color:var(--muted)">0 نقطة</span>';
+    document.getElementById('status-card').style.borderColor='var(--green-bd)';
+    hideGpsError();
+
+    // live timer
+    timerInterval=setInterval(()=>{
+      const elapsed=Date.now()-startTime;
+      document.getElementById('inf-time').textContent=fClock(elapsed);
+    },1000);
+
+    // watch position
+    function handlePos(pos){
+      const c=pos.coords;
+      const now=Date.now();
+      // تجاهل تحديثات متكررة جداً (أقل من 300ms فقط)
+      if(now-lastPosTime < 300) return;
+      lastPosTime=now;
+
+      // فلترة النقاط ذات الدقة السيئة جداً فقط (>120م)
+      if(c.accuracy > 120) return;
+
+      if(lastPos){
+        const d=haversine(lastPos.latitude,lastPos.longitude,c.latitude,c.longitude);
+        const timeDiff=(now - (posLog.length>0 ? posLog[posLog.length-1].t : now))/1000;
+
+        // حساب السرعة المتوقعة لفلترة القفزات الوهمية
+        const speedMs = timeDiff>0 ? (d*1000)/timeDiff : 0;
+
+        // تجاهل القفزات الوهمية (أكثر من 200 كم/ساعة = 55 م/ث)
+        if(speedMs > 55) return;
+
+        // قبول المسافات من 3م فأكثر (كانت 8م) لالتقاط المنعطفات
+        const minDist = c.accuracy < 20 ? 0.003 : (c.accuracy < 50 ? 0.005 : 0.008);
+        if(d > minDist) {
+          currentKm += d;
+          lastValidPos = c;
+        }
+      }
+      lastPos=c;
+      posLog.push({t:now,lat:c.latitude,lon:c.longitude,acc:c.accuracy});
+      // حفظ نقطة للمسار كل 5م (كانت 10م) لمسار أدق
+      if(routePoints.length===0 || haversine(routePoints[routePoints.length-1][0],routePoints[routePoints.length-1][1],c.latitude,c.longitude)*1000>5){
+        routePoints.push([c.latitude,c.longitude]);
+      }
+      const pcEl=document.getElementById('pos-count');
+      if(pcEl) pcEl.textContent=posLog.length+' نقطة';
+      const spd=c.speed!=null && c.speed>=0 ? Math.round(c.speed*3.6):0;
+      const acc=Math.round(c.accuracy);
+      document.getElementById('status-km').className='status-km status-active';
+      document.getElementById('status-km').innerHTML='<span>كم</span>'+fKm(currentKm);
+      document.getElementById('inf-speed').innerHTML=spd+' <span style="font-size:10px;color:var(--muted)">كم/س</span>';
+      const accEl=document.getElementById('inf-acc');
+      if(acc<=15){accEl.innerHTML='<span class="acc-badge acc-good">±'+acc+'م</span>';}
+      else if(acc<=50){accEl.innerHTML='<span class="acc-badge acc-ok">±'+acc+'م</span>';}
+      else{accEl.innerHTML='<span class="acc-badge acc-bad">±'+acc+'م</span>';}
+    }
+
+    watchId=navigator.geolocation.watchPosition(handlePos,
+      err=>{showGpsError('خطأ GPS أثناء التتبع: '+err.message);},
+      {enableHighAccuracy:true,maximumAge:500,timeout:15000});
+
+    // fallback polling كل 3 ثواني إذا watchPosition توقف
+    fallbackInterval=setInterval(()=>{
+      if(!tracking) return;
+      const sinceLastUpdate=Date.now()-lastPosTime;
+      if(sinceLastUpdate>4000){
+        // لم يصل تحديث منذ 4 ثواني، نطلب موقع يدوياً
+        navigator.geolocation.getCurrentPosition(handlePos,
+          ()=>{},
+          {enableHighAccuracy:true,maximumAge:1000,timeout:8000});
+      }
+    },3000);
+
+  },err=>{
+    document.getElementById('main-btn').disabled=false;
+    document.getElementById('main-btn').textContent='🟢 انطلق';
+    let msg='تعذّر تحديد موقعك. ';
+    if(err.code===1)msg+='يرجى السماح بالوصول للموقع من إعدادات المتصفح.';
+    else if(err.code===2)msg+='GPS غير متاح حالياً، تأكد من تفعيله.';
+    else msg+='انتهت مهلة الاتصال بـ GPS.';
+    showGpsError(msg);
+  },{enableHighAccuracy:true,timeout:15000});
+}
+
+function endTrip(){
+  if(!tracking)return;
+  stopTracking();
+  const trip={
+    id:Date.now(),
+    start:new Date(startTime).toISOString(),
+    end:new Date().toISOString(),
+    km:currentKm,
+    duration:Date.now()-startTime,
+    note:document.getElementById('trip-note').value.trim(),
+    maxSpeed:0,
+    route:routePoints.slice()
+  };
+  const trips=loadTrips();
+  trips.unshift(trip);
+  saveTrips(trips);
+  updateTotalPill();
+  // reset UI
+  resetUI();
+  // flash confirmation
+  const card=document.getElementById('status-card');
+  card.style.borderColor='var(--green-bd)';
+  card.style.background='rgba(63,185,80,.08)';
+  document.getElementById('status-km').className='status-km status-active';
+  document.getElementById('status-km').innerHTML='<span>كم</span>'+fKm(trip.km);
+  document.getElementById('status-label').textContent='✅ تم حفظ الرحلة!';
+  document.getElementById('status-hint').textContent='المسافة: '+fKm(trip.km)+' كم — المدة: '+fTime(trip.duration);
+  document.getElementById('trip-note').value='';
+  setTimeout(()=>{
+    resetCard();
+  },3000);
+}
+
+function cancelTrip(){
+  if(!confirm('إلغاء الرحلة الحالية؟'))return;
+  stopTracking();
+  resetUI();
+  resetCard();
+}
+
+function stopTracking(){
+  tracking=false;
+  if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+  if(fallbackInterval){clearInterval(fallbackInterval);fallbackInterval=null;}
+  lastPosTime=0;
+}
+
+function resetUI(){
+  document.getElementById('main-btn').className='btn-start';
+  document.getElementById('main-btn').innerHTML='🟢 &nbsp;انطلق';
+  document.getElementById('main-btn').disabled=false;
+  document.getElementById('cancel-btn').style.display='none';
+  document.getElementById('note-wrap').style.opacity='1';
+  document.getElementById('trip-note').disabled=false;
+  document.getElementById('inf-time').textContent='--:--';
+  document.getElementById('inf-speed').innerHTML='0 <span style="font-size:10px;color:var(--muted)">كم/س</span>';
+  document.getElementById('inf-acc').textContent='—';
+}
+
+function resetCard(){
+  document.getElementById('status-card').style.borderColor='';
+  document.getElementById('status-card').style.background='';
+  document.getElementById('status-km').className='status-km status-idle';
+  document.getElementById('status-km').innerHTML='<span>كم</span>0.00';
+  document.getElementById('status-label').textContent='المسافة المقطوعة';
+  document.getElementById('status-hint').textContent='اضغط انطلق لبدء تسجيل رحلة جديدة';
+}
+
+// ── GPS Error ─────────────────────────────────────────────────────────────────
+function showGpsError(msg){const e=document.getElementById('gps-error');e.textContent='⚠️ '+msg;e.style.display='block';}
+function hideGpsError(){document.getElementById('gps-error').style.display='none';}
+
+// ── History ───────────────────────────────────────────────────────────────────
+let activeFilter='all';
+
+function renderHistory(){
+  const trips=loadTrips();
+  // build filter dates
+  const filterRow=document.getElementById('filter-row');
+  const dates=[...new Set(trips.map(t=>new Date(t.start).toLocaleDateString('ar-LB',{year:'numeric',month:'2-digit',day:'2-digit'})))];
+  filterRow.innerHTML='<button class="filter-btn'+(activeFilter==='all'?' active':'')+'" onclick="setFilter(\'all\')">الكل ('+trips.length+')</button>'+
+    dates.slice(0,10).map(d=>'<button class="filter-btn'+(activeFilter===d?' active':'')+'" onclick="setFilter(\''+d+'\')">'+d+'</button>').join('');
+
+  const filtered=activeFilter==='all'?trips:trips.filter(t=>new Date(t.start).toLocaleDateString('ar-LB',{year:'numeric',month:'2-digit',day:'2-digit'})===activeFilter);
+  const list=document.getElementById('history-list');
+  if(filtered.length===0){
+    list.innerHTML='<div class="empty-state"><div class="ei">🚗</div><p>لا توجد رحلات مسجّلة بعد<br>اضغط "انطلق" لبدء أول رحلة</p></div>';
+    return;
+  }
+  list.innerHTML=filtered.map((t,i)=>{
+    const idx=trips.indexOf(t);
+    const cost=calcCost(t.km);
+    return `<div class="trip-item">
+      <div class="trip-top">
+        <div>
+          <div class="trip-date">📅 ${dateOnly(t.start)} &nbsp;⏰ ${timeOnly(t.start)}</div>
+          ${t.note?'<div class="trip-note">📝 '+t.note+'</div>':''}
+        </div>
+        <div style="text-align:left">
+          <div class="trip-km">${fKm(t.km)}</div>
+          <div class="trip-km-lbl">كيلومتر</div>
+        </div>
+      </div>
+      <div class="trip-details">
+        <div class="trip-det"><div class="dl">المدة</div><div class="dv" style="color:var(--blue)">${fTime(t.duration)}</div></div>
+        <div class="trip-det"><div class="dl">الانطلاق</div><div class="dv">${timeOnly(t.start)}</div></div>
+        <div class="trip-det"><div class="dl">الوصول</div><div class="dv">${timeOnly(t.end)}</div></div>
+      </div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px">ليترات</div><div style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--yellow)">${cost.liters.toFixed(2)}L</div></div>
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px">دولار</div><div style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green)">$${cost.usd.toFixed(2)}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px">ليرة</div><div style="font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue)">${Math.round(cost.lbp).toLocaleString()}</div></div>
+      </div>
+      <button class="trip-del" onclick="deleteTrip(${idx})">🗑️ حذف هذه الرحلة</button>
+      ${t.route&&t.route.length>1?'<button onclick=\'openMap('+JSON.stringify(t).replace(/'/g,"\\'")+')\'  style="width:100%;margin-top:6px;padding:8px;background:var(--blue-bg);border:1px solid var(--blue-bd);color:var(--blue);border-radius:10px;font-size:13px;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">🗺️ عرض المسار</button>':''}
+    </div>`;
+  }).join('');
+}
+
+function setFilter(f){activeFilter=f;renderHistory();}
+
+function deleteTrip(i){
+  if(!confirm('حذف هذه الرحلة؟'))return;
+  const trips=loadTrips();trips.splice(i,1);saveTrips(trips);
+  updateTotalPill();renderHistory();renderStats();
+}
+
+function confirmClear(){
+  const trips=loadTrips();
+  if(trips.length===0){alert('السجل فارغ أصلاً');return;}
+  if(!confirm('مسح جميع الرحلات ('+trips.length+' رحلة)؟\nهذا الإجراء لا يمكن التراجع عنه!'))return;
+  saveTrips([]);updateTotalPill();renderHistory();renderStats();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function renderStats(){
+  const trips=loadTrips();
+  const totalKm=trips.reduce((s,t)=>s+t.km,0);
+  const totalTime=trips.reduce((s,t)=>s+t.duration,0);
+  const avgKm=trips.length?totalKm/trips.length:0;
+  const maxKm=trips.length?Math.max(...trips.map(t=>t.km)):0;
+
+  document.getElementById('stat-grid').innerHTML=`
+    <div class="stat-card"><div class="sl">إجمالي الكيلومترات</div><div class="sv" style="color:var(--green)">${fKm(totalKm)}</div><div class="su">كيلومتر</div></div>
+    <div class="stat-card"><div class="sl">عدد الرحلات</div><div class="sv" style="color:var(--blue)">${trips.length}</div><div class="su">رحلة</div></div>
+    <div class="stat-card"><div class="sl">متوسط الرحلة</div><div class="sv" style="color:var(--yellow)">${fKm(avgKm)}</div><div class="su">كم/رحلة</div></div>
+    <div class="stat-card"><div class="sl">أطول رحلة</div><div class="sv" style="color:var(--red)">${fKm(maxKm)}</div><div class="su">كيلومتر</div></div>
+  `;
+  // fuel cost totals
+  const totalCost=calcCost(totalKm);
+  const fuelDiv=document.getElementById('stat-grid');
+  fuelDiv.innerHTML+=`
+    <div class="stat-card" style="grid-column:1/-1;background:var(--card2)">
+      <div class="sl" style="margin-bottom:10px">⛽ إجمالي تكلفة الوقود</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:4px">ليترات</div><div style="font-size:20px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--yellow)">${totalCost.liters.toFixed(1)}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:4px">دولار</div><div style="font-size:20px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--green)">$${totalCost.usd.toFixed(1)}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:4px">ليرة</div><div style="font-size:16px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--blue)">${(totalCost.lbp/1000000).toFixed(2)}M</div></div>
+      </div>
+    </div>
+  `;
+
+  // daily breakdown
+  const byDay={};
+  trips.forEach(t=>{
+    const d=dateOnly(t.start);
+    if(!byDay[d]){byDay[d]={km:0,count:0};}
+    byDay[d].km+=t.km;byDay[d].count++;
+  });
+  const days=Object.entries(byDay).slice(0,30);
+  if(days.length===0){document.getElementById('daily-breakdown').innerHTML='<div class="empty-state"><div class="ei">📊</div><p>لا توجد بيانات بعد</p></div>';return;}
+  document.getElementById('daily-breakdown').innerHTML=
+    '<div class="history-title" style="margin-bottom:12px">التفاصيل اليومية</div>'+
+    days.map(([d,v])=>`
+      <div class="day-group">
+        <div class="day-label"><span>${d}</span><span class="day-km">${fKm(v.km)} كم</span><span style="font-size:11px;color:var(--muted);font-weight:700">${v.count} رحلة</span></div>
+      </div>
+    `).join('');
+}
+
+// ── Totals ────────────────────────────────────────────────────────────────────
+function updateTotalPill(){
+  const trips=loadTrips();
+  const total=trips.reduce((s,t)=>s+t.km,0);
+  document.getElementById('total-pill').textContent=fKm(total)+' كم';
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function init(){
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('page-'+tab.dataset.tab).classList.add('active');
+      if(tab.dataset.tab==='history'){renderHistory();}
+      if(tab.dataset.tab==='stats'){renderStats();}
+      if(tab.dataset.tab==='settings'){renderSettingsPreview();}
+    });
+  });
+  updateTotalPill();
+}
+
+init();
+</script>
+</body>
+</html>
